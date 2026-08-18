@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Babylon.js Parametric Creature PoC</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #17202a;
+      background: #eef1f4;
+    }
+
+    .app {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+
+    .controls {
+      width: 280px;
+      flex: 0 0 280px;
+      padding: 24px 20px;
+      background: #ffffff;
+      border-right: 1px solid #d7dce1;
+    }
+
+    h1 {
+      margin: 0 0 22px;
+      font-size: 20px;
+      line-height: 1.2;
+    }
+
+    .parameter {
+      margin-bottom: 18px;
+    }
+
+    .parameter-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+      font-size: 14px;
+    }
+
+    .parameter-value {
+      min-width: 42px;
+      color: #59636e;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: #3c7aa8;
+      cursor: pointer;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 26px;
+    }
+
+    button {
+      flex: 1;
+      padding: 9px 10px;
+      border: 1px solid #bcc6cf;
+      border-radius: 5px;
+      color: #17202a;
+      background: #f5f7f9;
+      cursor: pointer;
+    }
+
+    button:hover { background: #e9eef2; }
+
+    .viewport {
+      position: relative;
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    #renderCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      outline: none;
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <aside class="controls">
+      <h1>Parametric Creature</h1>
+
+      <div class="parameter">
+        <div class="parameter-row">
+          <label for="parameterA">Parameter A</label>
+          <output id="valueA" class="parameter-value">1.35</output>
+        </div>
+        <input id="parameterA" type="range" min="0.75" max="2.20" step="0.01" value="1.35">
+      </div>
+
+      <div class="parameter">
+        <div class="parameter-row">
+          <label for="parameterB">Parameter B</label>
+          <output id="valueB" class="parameter-value">1.00</output>
+        </div>
+        <input id="parameterB" type="range" min="0.70" max="1.50" step="0.01" value="1.00">
+      </div>
+
+      <div class="parameter">
+        <div class="parameter-row">
+          <label for="parameterC">Parameter C</label>
+          <output id="valueC" class="parameter-value">1.00</output>
+        </div>
+        <input id="parameterC" type="range" min="0.65" max="1.45" step="0.01" value="1.00">
+      </div>
+
+      <div class="parameter">
+        <div class="parameter-row">
+          <label for="parameterD">Parameter D</label>
+          <output id="valueD" class="parameter-value">0.35</output>
+        </div>
+        <input id="parameterD" type="range" min="0.22" max="0.58" step="0.01" value="0.35">
+      </div>
+
+      <div class="parameter">
+        <div class="parameter-row">
+          <label for="parameterE">Parameter E</label>
+          <output id="valueE" class="parameter-value">1.10</output>
+        </div>
+        <input id="parameterE" type="range" min="0.35" max="2.40" step="0.01" value="1.10">
+      </div>
+
+      <div class="parameter">
+        <div class="parameter-row">
+          <label for="parameterF">Parameter F</label>
+          <output id="valueF" class="parameter-value">0</output>
+        </div>
+        <input id="parameterF" type="range" min="0" max="1" step="1" value="0">
+      </div>
+
+      <div class="buttons">
+        <button id="resetButton" type="button">Reset</button>
+        <button id="randomizeButton" type="button">Randomize</button>
+      </div>
+    </aside>
+
+    <section class="viewport">
+      <canvas id="renderCanvas" aria-label="3D creature preview"></canvas>
+    </section>
+  </main>
+
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script>
+    const canvas = document.getElementById("renderCanvas");
+    const engine = new BABYLON.Engine(canvas, true);
+
+    const parameters = {
+      A: 1.35,
+      B: 1.00,
+      C: 1.00,
+      D: 0.35,
+      E: 1.10,
+      F: 0
+    };
+
+    const defaults = { ...parameters };
+    const parameterInputs = {
+      A: document.getElementById("parameterA"),
+      B: document.getElementById("parameterB"),
+      C: document.getElementById("parameterC"),
+      D: document.getElementById("parameterD"),
+      E: document.getElementById("parameterE"),
+      F: document.getElementById("parameterF")
+    };
+    const parameterOutputs = {
+      A: document.getElementById("valueA"),
+      B: document.getElementById("valueB"),
+      C: document.getElementById("valueC"),
+      D: document.getElementById("valueD"),
+      E: document.getElementById("valueE"),
+      F: document.getElementById("valueF")
+    };
+
+    const scene = createScene();
+    const creature = createCreature(scene);
+    updateCreature(parameters);
+
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener("resize", () => engine.resize());
+
+    Object.keys(parameterInputs).forEach((key) => {
+      parameterInputs[key].addEventListener("input", (event) => {
+        parameters[key] = Number(event.target.value);
+        updateParameterReadout();
+        updateCreature(parameters);
+      });
+    });
+
+    document.getElementById("resetButton").addEventListener("click", () => {
+      Object.assign(parameters, defaults);
+      syncControls();
+      updateCreature(parameters);
+    });
+
+    document.getElementById("randomizeButton").addEventListener("click", () => {
+      Object.keys(parameterInputs).forEach((key) => {
+        const input = parameterInputs[key];
+        const min = Number(input.min);
+        const max = Number(input.max);
+        const step = Number(input.step);
+        const count = Math.floor((max - min) / step);
+        parameters[key] = min + Math.floor(Math.random() * (count + 1)) * step;
+        parameters[key] = Number(parameters[key].toFixed(2));
+      });
+      syncControls();
+      updateCreature(parameters);
+    });
+
+    function createScene() {
+      const newScene = new BABYLON.Scene(engine);
+      newScene.clearColor = new BABYLON.Color4(0.89, 0.92, 0.95, 1);
+
+      const camera = new BABYLON.ArcRotateCamera(
+        "camera",
+        -Math.PI / 2.4,
+        Math.PI / 2.7,
+        8.5,
+        new BABYLON.Vector3(0, 1.6, 0),
+        newScene
+      );
+      camera.lowerRadiusLimit = 4;
+      camera.upperRadiusLimit = 14;
+      camera.attachControl(canvas, true);
+
+      const hemisphere = new BABYLON.HemisphericLight(
+        "hemisphereLight",
+        new BABYLON.Vector3(0, 1, 0),
+        newScene
+      );
+      hemisphere.intensity = 0.9;
+
+      const directional = new BABYLON.DirectionalLight(
+        "directionalLight",
+        new BABYLON.Vector3(-1, -2, -1),
+        newScene
+      );
+      directional.position = new BABYLON.Vector3(4, 8, 4);
+      directional.intensity = 0.45;
+
+      const ground = BABYLON.MeshBuilder.CreateGround(
+        "ground",
+        { width: 14, height: 14 },
+        newScene
+      );
+      const groundMaterial = new BABYLON.StandardMaterial("groundMaterial", newScene);
+      groundMaterial.diffuseColor = new BABYLON.Color3(0.73, 0.78, 0.82);
+      ground.material = groundMaterial;
+
+      return newScene;
+    }
+
+    // Primitive Meshを一度だけ作成し、updateCreature()で形と位置を更新する。
+    function createCreature(targetScene) {
+      const bodyMaterial = new BABYLON.StandardMaterial("bodyMaterial", targetScene);
+      bodyMaterial.diffuseColor = new BABYLON.Color3(0.20, 0.48, 0.62);
+
+      const headMaterial = new BABYLON.StandardMaterial("headMaterial", targetScene);
+      headMaterial.diffuseColor = new BABYLON.Color3(0.84, 0.42, 0.20);
+
+      const legMaterial = new BABYLON.StandardMaterial("legMaterial", targetScene);
+      legMaterial.diffuseColor = new BABYLON.Color3(0.13, 0.28, 0.38);
+
+      const tailMaterial = new BABYLON.StandardMaterial("tailMaterial", targetScene);
+      tailMaterial.diffuseColor = new BABYLON.Color3(0.76, 0.32, 0.18);
+
+      const body = BABYLON.MeshBuilder.CreateBox(
+        "body",
+        { width: 1, height: 1, depth: 1 },
+        targetScene
+      );
+      body.material = bodyMaterial;
+
+      const headCircle = BABYLON.MeshBuilder.CreateSphere(
+        "headCircle",
+        { diameter: 1, segments: 8 },
+        targetScene
+      );
+      headCircle.material = headMaterial;
+
+      const headTriangle = BABYLON.MeshBuilder.CreateCylinder(
+        "headTriangle",
+        { diameterTop: 0.05, diameterBottom: 1, height: 1, tessellation: 3 },
+        targetScene
+      );
+      headTriangle.material = headMaterial;
+      headTriangle.isVisible = false;
+
+      const legs = ["frontLeft", "frontRight", "backLeft", "backRight"].map((name) => {
+        const leg = BABYLON.MeshBuilder.CreateBox(
+          name,
+          { width: 1, height: 1, depth: 1 },
+          targetScene
+        );
+        leg.material = legMaterial;
+        return leg;
+      });
+
+      const tail = BABYLON.MeshBuilder.CreateCylinder(
+        "tail",
+        { diameter: 1, height: 1, tessellation: 6 },
+        targetScene
+      );
+      tail.material = tailMaterial;
+      tail.rotation.z = -Math.PI / 2;
+
+      return { body, headCircle, headTriangle, legs, tail };
+    }
+
+    function updateCreature(values) {
+      const bodyLength = 2.8 * values.B;
+      const bodyHeight = 1.25 * values.B;
+      const bodyWidth = 1.5 * values.B;
+      const bodyBottom = values.A;
+      const bodyCenterY = bodyBottom + bodyHeight / 2;
+
+      creature.body.scaling.set(bodyLength, bodyHeight, bodyWidth);
+      creature.body.position.set(0, bodyCenterY, 0);
+
+      const headSize = 1.05 * values.C;
+      const headX = bodyLength / 2 + headSize * 0.34;
+      const headY = bodyBottom + bodyHeight * 0.72 + headSize * 0.30;
+      [creature.headCircle, creature.headTriangle].forEach((head) => {
+        head.scaling.set(headSize, headSize, headSize);
+        head.position.set(headX, headY, 0);
+      });
+      creature.headCircle.isVisible = values.F < 0.5;
+      creature.headTriangle.isVisible = values.F >= 0.5;
+
+      const legThickness = values.D;
+      const legX = bodyLength * 0.33;
+      const legZ = bodyWidth * 0.31;
+      const legPositions = [
+        [-legX, -legZ],
+        [-legX, legZ],
+        [legX, -legZ],
+        [legX, legZ]
+      ];
+      creature.legs.forEach((leg, index) => {
+        const [x, z] = legPositions[index];
+        leg.scaling.set(legThickness, values.A, legThickness);
+        leg.position.set(x, values.A / 2, z);
+      });
+
+      const tailLength = values.E;
+      creature.tail.scaling.set(0.28, tailLength, 0.28);
+      creature.tail.position.set(-bodyLength / 2 - tailLength / 2 + 0.08, bodyCenterY + 0.12, 0);
+
+      updateParameterReadout();
+    }
+
+    function syncControls() {
+      Object.keys(parameterInputs).forEach((key) => {
+        parameterInputs[key].value = parameters[key].toFixed(2);
+      });
+      updateParameterReadout();
+    }
+
+    function updateParameterReadout() {
+      Object.keys(parameterOutputs).forEach((key) => {
+        parameterOutputs[key].value = parameters[key].toFixed(2);
+        parameterOutputs[key].textContent = parameters[key].toFixed(2);
+      });
+    }
+  </script>
+</body>
+</html>
